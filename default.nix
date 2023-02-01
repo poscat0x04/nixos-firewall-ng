@@ -98,7 +98,7 @@ let
 
       downRules = mkOption {
         type = types.str;
-        default = config.flushRules;
+        default = config.reloadRules;
         description = ''
           The nftables rules for brining down the firewall. By default, this is the same
           as reloadRules.
