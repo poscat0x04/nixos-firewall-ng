@@ -12,29 +12,29 @@ let
 
   fw-lib = import ./lib.nix;
 
-  serviceToSystemdConfig = s: lib.mapAttrs' (attrName: value: rec {
+  serviceToSystemdConfig = s: lib.mapAttrs' (attrName: config: rec {
     name = "nftables-${attrName}";
     value = let
       startScript = pkgs.writeScript "nftables-${name}-start" ''
         #! ${pkgs.nftables}/bin/nft -f
-        ${value.upRules}
+        ${config.upRules}
       '';
 
       reloadScript = pkgs.writeScript "nftables-${name}-reload" ''
         #! ${pkgs.nftables}/bin/nft -f
-        ${value.reloadRules}
-        ${value.upRules}
+        ${config.reloadRules}
+        ${config.upRules}
       '';
 
       stopScript = pkgs.writeScript "nftables-${name}-reload" ''
         #! ${pkgs.nftables}/bin/nft -f
-        ${value.downRules}
+        ${config.downRules}
       '';
     in {
-      inherit (value) description;
-      wantedBy = lib.optional value.autoStart "multi-user.target" ++ value.wantedBy;
-      after = [ "nftables.service" ] ++ value.after;
-      bindsTo = [ "nftables.service" ] ++ value.bindsTo;
+      inherit (config) description;
+      wantedBy = lib.optional config.autoStart "multi-user.target" ++ config.wantedBy;
+      after = [ "nftables.service" ] ++ config.after;
+      bindsTo = [ "nftables.service" ] ++ config.bindsTo;
       reloadTriggers = [ startScript reloadScript stopScript ];
       unitConfig.ReloadPropagatedFrom = [ "nftables.service" ];
       serviceConfig = {
