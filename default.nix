@@ -32,9 +32,9 @@ let
       '';
     in {
       inherit (value) description;
-      wantedBy = lib.optional value.autoStart "multi-user.target";
-      after = [ "nftables.service" ];
-      requires = [ "nftables.service" ];
+      wantedBy = lib.optional value.autoStart "multi-user.target" ++ value.wantedBy;
+      after = [ "nftables.service" ] ++ value.after;
+      bindsTo = [ "nftables.service" ] ++ value.bindsTo;
       reloadTriggers = [ startScript reloadScript stopScript ];
       unitConfig.ReloadPropagatedFrom = [ "nftables.service" ];
       serviceConfig = {
@@ -106,6 +106,30 @@ let
           When starting the service, upRules are applied.
           When reload the service, reloadRules and upRules are applied sequentially.
           When stopping the service, downRules are applied.
+        '';
+      };
+
+      wantedBy = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        description = ''
+          Additional "WantedBy="s for the systemd service
+        '';
+      };
+
+      bindsTo = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        description = ''
+          Additional "BindsTo="s for the systemd service
+        '';
+      };
+
+      after = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        description = ''
+          Additional "After="s for the systemd service
         '';
       };
     };
