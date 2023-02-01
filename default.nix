@@ -45,7 +45,7 @@ let
         ExecStop = stopScript;
       };
     };
-  });
+  }) s;
 
   nft-service-mod = { config, ... }: {
     options = with lib; {
@@ -150,7 +150,7 @@ in {
       };
 
       masqueradeAll = mkOption {
-        type = types.boo;
+        type = types.bool;
         default = false;
         description = ''
           Whether to masquerade on all interfaces
@@ -185,7 +185,7 @@ in {
       };
 
       masqueradeAll = mkOption {
-        type = types.boo;
+        type = types.bool;
         default = false;
         description = ''
           Whether to masquerade on all interfaces
@@ -271,7 +271,9 @@ in {
 
             chain zone_wan_input {
               udp dport 68 accept comment "Allow DHCP renew"
-              icmp type echo-request accept comment "Allow ping"
+              ${lib.optionalString cfg.allowPing ''
+                icmp type echo-request accept comment "Allow ping"
+              ''}
 
               tcp dport @globally_accepted_tcp_ports accept
               udp dport @globally_accepted_udp_ports accept
