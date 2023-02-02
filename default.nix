@@ -35,7 +35,6 @@ let
       wantedBy = lib.optional config.autoStart "multi-user.target" ++ config.wantedBy;
       after = [ "nftables.service" ] ++ config.after;
       bindsTo = [ "nftables.service" ] ++ config.bindsTo;
-      reloadTriggers = [ startScript reloadScript stopScript ];
       unitConfig.ReloadPropagatedFrom = [ "nftables.service" ];
       serviceConfig = {
         Type = "oneshot";
@@ -86,9 +85,10 @@ let
 
       reloadRules = mkOption {
         type = types.str;
-        default = "";
+        default = config.reloadRules;
         description = ''
-          The nftables rules for reloading the firewall.
+          The nftables rules for reloading the firewall. By default, this is the same
+          as downRules
 
           When starting the service, upRules are applied.
           When reload the service, reloadRules and upRules are applied sequentially.
@@ -98,10 +98,9 @@ let
 
       downRules = mkOption {
         type = types.str;
-        default = config.reloadRules;
+        default = "";
         description = ''
-          The nftables rules for brining down the firewall. By default, this is the same
-          as reloadRules.
+          The nftables rules for brining down the firewall.
 
           When starting the service, upRules are applied.
           When reload the service, reloadRules and upRules are applied sequentially.
@@ -455,6 +454,11 @@ in {
         '';
       };
     };
-    systemd.services = serviceToSystemdConfig cfg-ng.nftables-service;
+    systemd.services = serviceToSystemdConfig cfg-ng.nftables-service // {
+      nftables = {
+        reloadIfChanged = lib.mkForce false;
+        serviceConfig.ExecReload = lib.mkForce [];
+      };
+    };
   };
 }
