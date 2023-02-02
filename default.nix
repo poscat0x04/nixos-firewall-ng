@@ -15,26 +15,110 @@ let
   serviceToSystemdConfig = s: lib.mapAttrs' (attrName: config: rec {
     name = "nftables-${attrName}";
     value = let
+      cfg' = config.deviceMode;
+
+      # systemd does escaping of interface names when generating .device units
+      escapedIfaceName = builtins.replaceStrings ["-"] ["\\x2d"] cfg'.interface;
+      devDep = lib.optional cfg'.enable "sys-subsystem-net-devices-${escapedIfaceName}.device";
+
+      snat = cfg'.nat.snatTarget != null;
+      snat66 = cfg'.nat66.snatTarget != null;
+
+      upRulesExtra = lib.optionalString cfg'.enable ''
+        ${lib.optionalString cfg'.offload ''
+          table inet filter {
+            flowtable f {
+              devices = { ${cfg'.interface} }
+            }
+          }
+        ''}
+
+        ${lib.optionalString cfg'.nat.masquerade ''
+          table ip nat {
+            set masquerade_if {
+              type iface_index
+              elements = { ${cfg'.interface} }
+            }
+          }
+        ''}
+
+        ${lib.optionalString snat ''
+          table ip nat {
+            map snat_if {
+              type iface_index : ipv4_addr
+              elements = { ${cfg'.interface} : ${cfg'.nat.snatTarget} }
+            }
+          }
+        ''}
+
+        ${lib.optionalString cfg'.nat66.masquerade ''
+          table ip6 nat66 {
+            set masquerade_if {
+              type iface_index
+              elements = { ${cfg'.interface} }
+            }
+          }
+        ''}
+
+        ${lib.optionalString snat66 ''
+          table ip6 nat66 {
+            map snat_if {
+              type iface_index : ipv6_addr
+              elements = { ${cfg'.interface} : ${cfg'.nat66.snatTarget} }
+            }
+          }
+        ''}
+      '';
+
+      downRulesExtra = lib.optionalString cfg'.enable ''
+        ${lib.optionalString cfg'.offload ''
+          delete flowtable inet filter f { devices = { ${cfg'.interface} }; }
+        ''}
+
+        ${lib.optionalString cfg'.nat.masquerade ''
+          delete element ip nat masquerade_if { ${cfg'.interface} }
+        ''}
+
+        ${''
+          delete element ip nat snat_if { ${cfg'.interface} }
+        ''}
+
+        ${lib.optionalString cfg'.nat66.masquerade ''
+          delete element ip6 nat66 masquerade_if { ${cfg'.interface} }
+        ''}
+
+        ${lib.optionalString snat66 ''
+          delete element ip6 nat66 snat_if { ${cfg'.interface} }
+        ''}
+      '';
+
       startScript = pkgs.writeScript "nftables-${name}-start" ''
         #! ${pkgs.nftables}/bin/nft -f
         ${config.upRules}
+        ${upRulesExtra}
       '';
 
       reloadScript = pkgs.writeScript "nftables-${name}-reload" ''
         #! ${pkgs.nftables}/bin/nft -f
+        ${downRulesExtra}
         ${config.reloadRules}
+
         ${config.upRules}
+        ${upRulesExtra}
       '';
 
-      stopScript = pkgs.writeScript "nftables-${name}-reload" ''
+      stopScript = pkgs.writeScript "nftables-${name}-stop" ''
         #! ${pkgs.nftables}/bin/nft -f
+        ${downRulesExtra}
         ${config.downRules}
       '';
+
     in {
       inherit (config) description;
-      wantedBy = lib.optional config.autoStart "multi-user.target" ++ config.wantedBy;
-      after = [ "nftables.service" ] ++ config.after;
-      bindsTo = [ "nftables.service" ] ++ config.bindsTo;
+      wantedBy = lib.optional config.autoStart "multi-user.target" ++ devDep ++ config.wantedBy;
+      after = [ "nftables.service" ] ++ devDep ++ config.after;
+      bindsTo = [ "nftables.service" ] ++ devDep ++ config.bindsTo;
+      reloadTriggers = [ startScript reloadScript stopScript ];
       unitConfig.ReloadPropagatedFrom = [ "nftables.service" ];
       serviceConfig = {
         Type = "oneshot";
@@ -71,8 +155,57 @@ let
         '';
       };
 
+      deviceMode = {
+        enable = mkEnableOption ''
+          Whether to enable device mode, which binds this service to an interface.
+        '';
+
+        interface = mkOption {
+          type = types.str;
+          description = ''
+            Name of the interface to bind to.
+          '';
+        };
+
+        offload = mkEnableOption ''
+          Whether to add this device to the flowtable.
+        '';
+
+        nat = {
+          masquerade = mkEnableOption ''
+            Whether to enable IPv4 masquerading on this interface
+            Mutually exclusive with snatTarget
+          '';
+
+          snatTarget = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              IP address to snat to
+              Mutually exclusive with masquerade
+            '';
+          };
+        };
+
+        nat66 = {
+          masquerade = mkEnableOption ''
+            Whether to enable IPv6 masquerading on this interface.
+            Mutually exclusive with snatTarget
+          '';
+
+          snatTarget = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              IP address to snat to
+              Mutually exclusive with masquerade
+            '';
+          };
+        };
+      };
+
       upRules = mkOption {
-        type = types.str;
+        type = types.lines;
         default = "";
         description = ''
           The nftables rules for brining up the firewall.
@@ -84,8 +217,8 @@ let
       };
 
       reloadRules = mkOption {
-        type = types.str;
-        default = config.reloadRules;
+        type = types.lines;
+        default = config.downRules;
         description = ''
           The nftables rules for reloading the firewall. By default, this is the same
           as downRules
@@ -97,7 +230,7 @@ let
       };
 
       downRules = mkOption {
-        type = types.str;
+        type = types.lines;
         default = "";
         description = ''
           The nftables rules for brining down the firewall.
