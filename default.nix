@@ -24,11 +24,22 @@ let
       snat = cfg'.nat.snatTarget != null;
       snat66 = cfg'.nat66.snatTarget != null;
 
+      setMark = cfg'.mark != null;
+
       upRulesExtra = lib.optionalString cfg'.enable ''
         ${lib.optionalString cfg'.offload ''
           table inet filter {
             flowtable f {
               devices = { ${cfg'.interface} }
+            }
+          }
+        ''}
+
+        ${lib.optionalString setMark ''
+          table inet marking {
+            map iif_mark {
+              type iface_index : mark
+              elements = { ${cfg'.interface} : ${cfg'.mark} }
             }
           }
         ''}
@@ -73,6 +84,10 @@ let
       downRulesExtra = lib.optionalString cfg'.enable ''
         ${lib.optionalString cfg'.offload ''
           delete flowtable inet filter f { devices = { ${cfg'.interface} }; }
+        ''}
+
+        ${lib.optionalString setMark ''
+          delete element inet marking iif_mark { ${cfg'.interface} }
         ''}
 
         ${lib.optionalString cfg'.nat.masquerade ''
@@ -170,6 +185,15 @@ let
         offload = mkEnableOption ''
           Whether to add this device to the flowtable.
         '';
+
+        mark = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            The firewall mark of all traffic associated with connections coming
+            from this interface. Useful for achieving symmetric routing.
+          '';
+        };
 
         nat = {
           masquerade = mkEnableOption ''
@@ -286,6 +310,14 @@ in {
           The devices/interfaces to offload for
         '';
       };
+    };
+
+    cgroupMarks = mkOption {
+      type = types.attrsOf types.str;
+      default = {};
+      description = ''
+        The firewall mark to assign to the (level 2) cgroup
+      '';
     };
 
     nat = {
@@ -529,6 +561,32 @@ in {
               type filter hook forward priority mangle; policy accept;
 
               tcp flags syn tcp option maxseg size set rt mtu
+            }
+          }
+
+          table inet marking {
+            comment "Table that sets firewall marks and conntrack marks"
+
+            map iif_mark {
+              type iface_index : mark
+            }
+
+            map cgroupv2_l2_mark {
+              type cgroupsv2 : mark
+              ${fw-lib.mapToElements cfg-ng.cgroupMarks}
+            }
+
+            chain output {
+              type route hook output priority mangle; policy accept;
+
+              meta mark set ct mark
+              meta mark set socket cgroupv2 level 2 map @cgroupv2_l2_mark
+            }
+
+            chain input{
+              type filter hook input priority mangle; policy accept;
+
+              ct mark set iif map @iif_mark
             }
           }
 
