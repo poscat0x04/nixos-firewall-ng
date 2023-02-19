@@ -611,8 +611,8 @@ in {
                 ip daddr @warp_v4_net udp dport @warp_ports @th,72,24 set ${cfg-ng.warpId}
                 ip6 daddr @warp_v6_net udp dport @warp_ports @th,72,24 set ${cfg-ng.warpId}
               ''}
-              meta mark set socket cgroupv2 level 2 map @cgroupv2_l2_mark accept
               meta mark set ct mark
+              meta mark set socket cgroupv2 level 2 map @cgroupv2_l2_mark
             }
 
             chain input{
