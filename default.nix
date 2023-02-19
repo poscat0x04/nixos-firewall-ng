@@ -6,6 +6,8 @@ let
 
   refuse = if cfg.rejectPackets then "rejected" else "dropped";
 
+  modifyWarp = cfg-ng.warpId != null;
+
   interfaces = builtins.attrNames cfg.interfaces;
 
   flipMap = lib.flip builtins.map;
@@ -320,6 +322,15 @@ in {
       '';
     };
 
+    warpId = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        The client ID of your warp client. When set, outgoing wireguard
+        packets to warp servers will be modified.
+      '';
+    };
+
     nat = {
       enable = mkOption {
         type = types.bool;
@@ -576,16 +587,41 @@ in {
               ${fw-lib.mapToElements cfg-ng.cgroupMarks}
             }
 
+            ${lib.optionalString modifyWarp ''
+              set warp_v4_net {
+                type ipv4_addr; flags constant, interval;
+                elements = { 162.159.192.0/24, 162.159.193.0/24 }
+              }
+
+              set warp_v6_net {
+                type ipv6_addr; flags constant, interval;
+                elements = { 2606:4700:d0::/48, 2606:4700:100::/48 }
+              }
+
+              set warp_ports {
+                type inet_service; flags constant;
+                elements = { 2408, 500, 1701, 4500 }
+              }
+            ''}
+
             chain output {
               type route hook output priority mangle; policy accept;
 
+              ${lib.optionalString modifyWarp ''
+                ip daddr @warp_v4_net udp dport @warp_ports @th,72,24 set ${cfg-ng.warpId}
+                ip6 daddr @warp_v6_net udp dport @warp_ports @th,72,24 set ${cfg-ng.warpId}
+              ''}
+              meta mark set socket cgroupv2 level 2 map @cgroupv2_l2_mark accept
               meta mark set ct mark
-              meta mark set socket cgroupv2 level 2 map @cgroupv2_l2_mark
             }
 
             chain input{
               type filter hook input priority mangle; policy accept;
 
+              ${lib.optionalString modifyWarp ''
+                ip saddr @warp_v4_net udp sport @warp_ports @th,72,24 set 0x0
+                ip6 saddr @warp_v6_net udp sport @warp_ports @th,72,24 set 0x0
+              ''}
               ct mark set iif map @iif_mark
             }
           }
