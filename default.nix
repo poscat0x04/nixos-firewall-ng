@@ -37,6 +37,15 @@ let
           }
         ''}
 
+        ${lib.optionalString cfg'.trust ''
+          table inet filter {
+            set lan_if {
+              type iface_index
+              elements = { ${cfg'.interface} }
+            }
+          }
+        ''}
+
         ${lib.optionalString setMark ''
           table inet marking {
             map iif_mark {
@@ -183,6 +192,10 @@ let
             Name of the interface to bind to.
           '';
         };
+
+        trust = mkEnableOption ''
+          Whether to trust this device
+        '';
 
         offload = mkEnableOption ''
           Whether to add this device to the flowtable.
