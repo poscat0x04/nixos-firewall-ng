@@ -431,6 +431,7 @@ in {
       };
       nftables = {
         enable = true;
+        checkRuleset = false;
         ruleset = ''
           table inet filter {
             set lan_if {
