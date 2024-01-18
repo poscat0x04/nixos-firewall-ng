@@ -470,6 +470,7 @@ in {
               flowtable f {
                 hook ingress priority 0
                 ${fw-lib.listToDevices cfg-ng.flowtable.devices}
+                counter
               }
             ''}
 
