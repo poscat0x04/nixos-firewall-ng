@@ -19,28 +19,16 @@ let
     value = let
       cfg' = config.deviceMode;
 
-      # systemd does escaping of interface names when generating .device units
-      escapedIfaceName = builtins.replaceStrings ["-"] ["\\x2d"] cfg'.interface;
-      devDep = lib.optional cfg'.enable "sys-subsystem-net-devices-${escapedIfaceName}.device";
-
       snat = cfg'.nat.snatTarget != null;
       snat66 = cfg'.nat66.snatTarget != null;
 
       setMark = cfg'.mark != null;
 
       upRulesExtra = lib.optionalString cfg'.enable ''
-        ${lib.optionalString cfg'.offload ''
-          table inet filter {
-            flowtable f {
-              devices = { ${cfg'.interface} }
-            }
-          }
-        ''}
-
         ${lib.optionalString cfg'.trust ''
           table inet filter {
             set lan_if {
-              type iface_index
+              type iface
               elements = { ${cfg'.interface} }
             }
           }
@@ -49,7 +37,7 @@ let
         ${lib.optionalString setMark ''
           table inet marking {
             map iif_mark {
-              type iface_index : mark
+              type iface : mark
               elements = { ${cfg'.interface} : ${cfg'.mark} }
             }
           }
@@ -58,7 +46,7 @@ let
         ${lib.optionalString cfg'.nat.masquerade ''
           table ip nat {
             set masquerade_if {
-              type iface_index
+              type iface
               elements = { ${cfg'.interface} }
             }
           }
@@ -67,7 +55,7 @@ let
         ${lib.optionalString snat ''
           table ip nat {
             map snat_if {
-              type iface_index : ipv4_addr
+              type iface : ipv4_addr
               elements = { ${cfg'.interface} : ${cfg'.nat.snatTarget} }
             }
           }
@@ -76,7 +64,7 @@ let
         ${lib.optionalString cfg'.nat66.masquerade ''
           table ip6 nat66 {
             set masquerade_if {
-              type iface_index
+              type iface
               elements = { ${cfg'.interface} }
             }
           }
@@ -85,7 +73,7 @@ let
         ${lib.optionalString snat66 ''
           table ip6 nat66 {
             map snat_if {
-              type iface_index : ipv6_addr
+              type iface : ipv6_addr
               elements = { ${cfg'.interface} : ${cfg'.nat66.snatTarget} }
             }
           }
@@ -93,10 +81,6 @@ let
       '';
 
       downRulesExtra = lib.optionalString cfg'.enable ''
-        ${lib.optionalString cfg'.offload ''
-          delete flowtable inet filter f { devices = { ${cfg'.interface} }; }
-        ''}
-
         ${lib.optionalString setMark ''
           delete element inet marking iif_mark { ${cfg'.interface} }
         ''}
@@ -141,9 +125,9 @@ let
 
     in {
       inherit (config) description;
-      wantedBy = lib.optional config.autoStart "multi-user.target" ++ devDep ++ config.wantedBy;
-      after = [ "nftables.service" ] ++ devDep ++ config.after;
-      bindsTo = [ "nftables.service" ] ++ devDep ++ config.bindsTo;
+      wantedBy = lib.optional config.autoStart "multi-user.target" ++ config.wantedBy;
+      after = [ "nftables.service" ] ++ config.after;
+      bindsTo = [ "nftables.service" ] ++ config.bindsTo;
       reloadTriggers = [ startScript reloadScript stopScript ];
       unitConfig.ReloadPropagatedFrom = [ "nftables.service" ];
       serviceConfig = {
@@ -168,7 +152,7 @@ let
 
       autoStart = mkOption {
         type = types.bool;
-        default = false;
+        default = true;
         description = ''
           Whether to start this service automatically during boot
         '';
@@ -436,7 +420,7 @@ in {
           table inet filter {
             set lan_if {
               comment "LAN zone interfaces"
-              type iface_index
+              type iface
               ${fw-lib.listToElements cfg.trustedInterfaces}
             }
 
@@ -478,7 +462,7 @@ in {
 
               ct state { established, related } accept comment "Allow established"
 
-              iif @lan_if accept comment "Allow input from LAN"
+              iifname @lan_if accept comment "Allow input from LAN"
               jump zone_wan_input comment "Filter input from WAN"
             }
 
@@ -545,7 +529,7 @@ in {
                 meta l4proto { tcp, udp } flow offload @f
               ''}
 
-              iif @lan_if accept comment "Allow LAN to anywhere"
+              iifname @lan_if accept comment "Allow LAN to anywhere"
               jump zone_wan_forward comment "Filter WAN forwards"
             }
 
@@ -565,7 +549,7 @@ in {
               udp dport 500 accept comment "Allow ISAKMP"
               ct status dnat accept comment "Allow port forwards"
 
-              oif != @lan_if reject with icmpx type no-route comment "Reject incorrectly routed packets"
+              oifname != @lan_if reject with icmpx type no-route comment "Reject incorrectly routed packets"
 
               ${lib.optionalString cfg.logRefusedPackets ''
                 meta pkttype host log level info prefix "firewall: dropped forwarding packet "
@@ -593,7 +577,7 @@ in {
             comment "Table that sets firewall marks and conntrack marks"
 
             map iif_mark {
-              type iface_index : mark
+              type iface : mark
             }
 
             map cgroupv2_l2_mark {
@@ -636,31 +620,31 @@ in {
                 ip saddr @warp_v4_net udp sport @warp_ports @th,72,24 set 0x0
                 ip6 saddr @warp_v6_net udp sport @warp_ports @th,72,24 set 0x0
               ''}
-              ct mark set iif map @iif_mark
+              ct mark set iifname map @iif_mark
             }
           }
 
           ${lib.optionalString cfg-ng.nat.enable ''
             table ip nat {
               set masquerade_if {
-                type iface_index
+                type iface
                 ${fw-lib.listToElements cfg-ng.nat.masquerade}
               }
 
               map snat_if {
-                type iface_index : ipv4_addr
+                type iface : ipv4_addr
                 ${fw-lib.mapToElements cfg-ng.nat.snatConfig}
               }
 
               chain postrouting {
                 type nat hook postrouting priority srcnat; policy accept;
 
-                snat to oif map @snat_if
+                snat to oifname map @snat_if
 
                 ${if cfg-ng.nat.masqueradeAll then ''
                   masquerade
                 '' else ''
-                  oif @masquerade_if masquerade
+                  oifname @masquerade_if masquerade
                 ''}
               }
             }
@@ -669,24 +653,24 @@ in {
           ${lib.optionalString cfg-ng.nat66.enable ''
             table ip6 nat66 {
               set masquerade_if {
-                type iface_index
+                type iface
                 ${fw-lib.listToElements cfg-ng.nat66.masquerade}
               }
 
               map snat_if {
-                type iface_index : ipv6_addr
+                type iface : ipv6_addr
                 ${fw-lib.mapToElements cfg-ng.nat66.snatConfig}
               }
 
               chain postrouting {
                 type nat hook postrouting priority srcnat; policy accept;
 
-                snat to oif map @snat_if
+                snat to oifname map @snat_if
 
                 ${if cfg-ng.nat66.masqueradeAll then ''
                   masquerade
                 '' else ''
-                  oif @masquerade_if masquerade
+                  oifname @masquerade_if masquerade
                 ''}
               }
             }
