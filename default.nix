@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 
 let
+  inherit (lib.lists) forEach;
+
   cfg = config.networking.firewall;
   cfg-ng = config.networking.fwng;
 
@@ -9,8 +11,6 @@ let
   modifyWarp = cfg-ng.warpId != null;
 
   interfaces = builtins.attrNames cfg.interfaces;
-
-  flipMap = lib.flip builtins.map;
 
   fw-lib = import ./lib.nix;
 
@@ -450,7 +450,7 @@ in {
               ${fw-lib.portsToElements cfg.allowedUDPPorts cfg.allowedUDPPortRanges}
             }
 
-            ${lib.concatStrings (flipMap interfaces (interface: let
+            ${lib.concatStrings (forEach interfaces (interface: let
               if-cfg = cfg.interfaces.${interface};
             in ''
               set if_${interface}_accepted_tcp_ports {
@@ -492,7 +492,7 @@ in {
               tcp dport @globally_accepted_tcp_ports accept
               udp dport @globally_accepted_udp_ports accept
 
-              ${lib.concatStrings (flipMap interfaces (interface: ''
+              ${lib.concatStrings (forEach interfaces (interface: ''
                 iif ${interface} tcp dport @if_${interface}_accepted_tcp_ports accept
                 iif ${interface} udp dport @if_${interface}_accepted_udp_ports accept
               ''))}
