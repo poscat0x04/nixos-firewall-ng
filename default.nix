@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  inherit (lib.lists) forEach;
+  inherit (lib.lists) forEach last;
 
   cfg = config.networking.firewall;
   cfg-ng = config.networking.fwng;
@@ -11,6 +11,9 @@ let
   modifyWarp = cfg-ng.warpId != null;
 
   interfaces = builtins.attrNames cfg.interfaces;
+
+  cgroups = builtins.attrNames cfg-ng.cgroupMarks;
+  slices = forEach cgroups (cg: last (builtins.split "/" cg));
 
   fw-lib = import ./lib.nix;
 
@@ -698,6 +701,8 @@ in {
     };
     systemd.services = serviceToSystemdConfig cfg-ng.nftables-service // {
       nftables = {
+        after = slices;
+        bindsTo = slices;
         reloadIfChanged = lib.mkForce false;
         serviceConfig.ExecReload = lib.mkForce [];
       };
