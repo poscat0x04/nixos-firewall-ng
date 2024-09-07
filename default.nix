@@ -575,12 +575,6 @@ in {
                 meta pkttype host log level info prefix "firewall: dropped forwarding packet "
               ''}
             }
-
-            chain output {
-              type filter hook output priority filter; policy accept;
-
-              ct state invalid log prefix "firewall: invalid packets" drop comment "Drop invalid conntrack state packets"
-            }
           }
 
           table inet clamp_mss {
