@@ -579,7 +579,7 @@ in {
             chain output {
               type filter hook output priority filter; policy accept;
 
-              ct state invalid drop comment "Drop invalid conntrack state packets"
+              ct state invalid log prefix "firewall: invalid packets" drop comment "Drop invalid conntrack state packets"
             }
           }
 
