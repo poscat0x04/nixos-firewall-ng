@@ -312,6 +312,14 @@ in {
   options.networking.fwng = with lib; {
     enable = mkEnableOption "Enable nixos-firewall-ng";
 
+    filterPollutedDNS = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Whether to filter out polluted dns responses
+      '';
+    };
+
     flowtable = {
       enable = mkOption {
         type = types.bool;
@@ -476,6 +484,17 @@ in {
                 counter
               }
             ''}
+
+            ${lib.optionalString cfg-ng.filterPollutedDNS ''
+              chain depollute {
+                type filter hook input priority -450;
+
+                ip saddr {8.8.8.8, 8.8.4.4} udp sport 53 ip id 0 drop
+                ip saddr {8.8.8.8, 8.8.4.4} udp sport 53 ip frag-off 0x4000 drop
+                ip saddr {223.5.5.5, 223,6,6,6} udp sport 53 @ih,32,32 0x0001 drop
+              }
+            ''}
+
 
             chain input {
               type filter hook input priority filter; policy drop;
