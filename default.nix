@@ -314,7 +314,7 @@ in {
 
     filterPollutedDNS = mkOption {
       type = types.bool;
-      default = false;
+      default = true;
       description = ''
         Whether to filter out polluted dns responses
       '';
@@ -485,19 +485,12 @@ in {
               }
             ''}
 
-            ${lib.optionalString cfg-ng.filterPollutedDNS ''
-              chain depollute {
-                type filter hook input priority -450;
-
-                ip saddr {8.8.8.8, 8.8.4.4} udp sport 53 ip id 0 drop
-                ip saddr {8.8.8.8, 8.8.4.4} udp sport 53 ip frag-off 0x4000 drop
-                ip saddr {223.5.5.5, 223.6.6.6} udp sport 53 @ih,32,32 0x0001 drop
-              }
-            ''}
-
-
             chain input {
               type filter hook input priority filter; policy drop;
+
+              ${lib.optionalString cfg-ng.filterPollutedDNS ''
+                ip saddr { 8.8.8.8, 8.8.4.4 } udp sport 53 @ih,80,16 '==' 0 drop
+              ''}
 
               ct state { established, related } accept comment "Allow established"
 
