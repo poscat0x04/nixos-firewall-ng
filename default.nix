@@ -491,7 +491,7 @@ in {
 
                 ip saddr {8.8.8.8, 8.8.4.4} udp sport 53 ip id 0 drop
                 ip saddr {8.8.8.8, 8.8.4.4} udp sport 53 ip frag-off 0x4000 drop
-                ip saddr {223.5.5.5, 223,6,6,6} udp sport 53 @ih,32,32 0x0001 drop
+                ip saddr {223.5.5.5, 223.6.6.6} udp sport 53 @ih,32,32 0x0001 drop
               }
             ''}
 
