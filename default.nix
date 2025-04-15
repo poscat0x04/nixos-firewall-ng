@@ -640,7 +640,7 @@ in {
               ct mark != 0 meta mark set ct mark
             }
 
-            chain input{
+            chain input {
               type filter hook input priority mangle; policy accept;
 
               ${lib.optionalString modifyWarp ''
@@ -649,6 +649,11 @@ in {
               ''}
               ct mark set iif map @iif_mark
             }
+
+	    chain forward {
+	      type filter hook forward priority mangle; policy accept;
+	      ct mark set iif map @iif_mark
+	    }
           }
 
           ${lib.optionalString cfg-ng.nat.enable ''
