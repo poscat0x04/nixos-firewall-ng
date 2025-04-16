@@ -610,7 +610,7 @@ in {
 
             chain prerouting {
               type filter hook prerouting priority mangle; policy accept;
-              ct mark set iif map @iif_mark
+              ct state new ct mark set iif map @iif_mark
               ct mark != 0 meta mark set ct mark
             }
           }
