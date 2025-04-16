@@ -478,8 +478,8 @@ in {
               type filter hook input priority filter; policy drop;
 
               ${lib.optionalString cfg-ng.filterPollutedDNS ''
-                ip saddr { 8.8.8.8 } udp sport 53 @ih,80,16 == 0 drop comment "Drop polluted DNS packets"
-                ip6 saddr { 2620:fe::fe:11 } udp sport 53 @ih,80,16 == 0 drop comment "Drop polluted DNS packets"
+                ip saddr { 8.8.8.8, 8.8.4.4 } udp sport 53 @ih,80,16 == 0 drop comment "Drop polluted DNS packets"
+                ip6 saddr { 2620:fe::fe:11, 2001:4860:4860::8844 } udp sport 53 @ih,80,16 == 0 drop comment "Drop polluted DNS packets"
               ''}
 
               ct state { established, related } accept comment "Allow established"
